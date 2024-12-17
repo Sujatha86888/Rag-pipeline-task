@@ -1,3 +1,68 @@
+import torch
+import numpy as np
+import faiss
+from transformers import AutoTokenizer, AutoModel
+
+# Initialize model and tokenizer
+model_name = "bert-base-uncased"  # Change to your model name
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModel.from_pretrained(model_name)
+
+# Initialize FAISS index
+dim = 768  # Adjust based on the model's output embedding size
+index = faiss.IndexFlatL2(dim)
+
+def generate_embeddings(text_chunks):
+    embeddings = []
+    for chunk in text_chunks:
+        inputs = tokenizer(chunk, return_tensors="pt", truncation=True, padding=True, max_length=512)
+        with torch.no_grad():
+            outputs = model(**inputs)
+            embedding = outputs.last_hidden_state.mean(dim=1).squeeze().numpy()
+        embeddings.append(embedding)
+    return np.array(embeddings)
+
+def store_embeddings(embeddings):
+    index.add(embeddings)
+
+def query_to_embedding(query):
+    inputs = tokenizer(query, return_tensors="pt", truncation=True, padding=True, max_length=512)
+    with torch.no_grad():
+        outputs = model(**inputs)
+        embedding = outputs.last_hidden_state.mean(dim=1).squeeze().numpy()
+    return embedding
+
+def retrieve_top_k_similar(query_embedding, k=3):
+    distances, indices = index.search(np.array([query_embedding]), k)
+    return distances, indices
+
+def generate_response(retrieved_indices, text_chunks):
+    response = ""
+    for idx in retrieved_indices[0]:
+        response += text_chunks[idx] + "\n\n"
+    return response
+
+# Main process
+pdf_path = 'sample.pdf'  # Path to your PDF file
+text = extract_text_from_pdf(pdf_path)  # Implement this function
+
+# Chunk the text
+chunks = chunk_text(text)  # Implement this function
+
+# Generate embeddings for chunks and store them in FAISS
+embeddings = generate_embeddings(chunks)
+store_embeddings(embeddings)
+
+# User query example
+query = "What is the content of the sample document?"
+query_embedding = query_to_embedding(query)
+
+# Retrieve the top-k most similar chunks
+distances, indices = retrieve_top_k_similar(query_embedding, k=3)
+
+# Generate the response based on retrieved chunks
+response = generate_response(indices, chunks)
+print(response)
 
 from fpdf import FPDF.docx
 
